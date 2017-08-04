@@ -32,9 +32,12 @@ import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 import java.net.SocketTimeoutException;
+import java.net.SocketException;
+import java.net.NetworkInterface;
 import java.util.HashMap;
 import java.util.Map;
-
+import java.util.Enumeration;
+import java.lang.StringBuilder;
 /**
  * Low-level functionality for handling questions and answers over the Multicast DNS Protocol
  * (RFC 6762), in conjunction with DNS Service Discovery (DNS-SD, RFC 6763).
@@ -90,6 +93,26 @@ public class MDNSDiscover {
         return bos.toByteArray();
     }
 
+
+    public static NetworkInterface getWlanEth() {
+        Enumeration<NetworkInterface> enumeration = null;
+        try {
+            enumeration = NetworkInterface.getNetworkInterfaces();
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        NetworkInterface wlan0 = null;
+        StringBuilder sb = new StringBuilder();
+        while (enumeration.hasMoreElements()) {
+            wlan0 = enumeration.nextElement();
+            sb.append(wlan0.getName() + " ");
+            if (wlan0.getName().startsWith("wlan")) {
+                return wlan0;
+            }
+        }
+
+        return null;
+    }
     /**
      * Sends a discovery packet for the specified service and listens for reply packets, notifying
      * a callback as services are discovered.
@@ -102,8 +125,16 @@ public class MDNSDiscover {
      */
     public static void discover(String serviceType, Callback callback, int timeout) throws IOException {
         if (timeout < 0) throw new IllegalArgumentException();
+
+        NetworkInterface wlan = getWlanEth();
+
         InetAddress group = InetAddress.getByName(MULTICAST_GROUP_ADDRESS);
         MulticastSocket sock = new MulticastSocket();   // binds to a random free source port
+
+        if (wlan != null) {
+            sock.setNetworkInterface(wlan);
+        }
+
         if (DEBUG) System.out.println("Source port is " + sock.getLocalPort());
         byte[] data = discoverPacket(serviceType);
         if (DEBUG) System.out.println("Query packet:");
@@ -150,8 +181,16 @@ public class MDNSDiscover {
      */
     public static Result resolve(String serviceName, int timeout) throws IOException {
         if (timeout < 0) throw new IllegalArgumentException();
+
+        NetworkInterface wlan = getWlanEth();
+
+
         InetAddress group = InetAddress.getByName(MULTICAST_GROUP_ADDRESS);
         MulticastSocket sock = new MulticastSocket();   // binds to a random free source port
+
+        sock.setNetworkInterface(wlan);
+
+
         if (DEBUG) System.out.println("Source port is " + sock.getLocalPort());
         if (DEBUG) System.out.println("Query packet:");
         byte[] data = queryPacket(serviceName, QCLASS_INTERNET | CLASS_FLAG_UNICAST, QTYPE_A, QTYPE_SRV, QTYPE_TXT);
